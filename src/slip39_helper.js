@@ -29,8 +29,9 @@ const ITERATION_EXP_WORDS_LENGTH = parseInt(
   10,
 );
 
-// The maximum iteration exponent
-const MAX_ITERATION_EXP = Math.pow(2, ITERATION_EXP_BITS_LENGTH);
+// The maximum iteration exponent. Only ITERATION_EXP_BITS_LENGTH bits are
+// available in the mnemonic, so the largest encodable value is 2**n - 1.
+const MAX_ITERATION_EXP = Math.pow(2, ITERATION_EXP_BITS_LENGTH) - 1;
 
 // The maximum number of shares that can be created.
 const MAX_SHARE_COUNT = 16;

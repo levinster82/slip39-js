@@ -1,5 +1,6 @@
 const assert = require("assert");
 const slip39 = require("../src/slip39");
+const helper = require("../src/slip39_helper");
 
 const MASTERSECRET = "ABCDEFGHIJKLMNOP";
 const MS = MASTERSECRET.slip39EncodeHex();
@@ -143,6 +144,47 @@ describe("Basic Tests", () => {
           }),
         Error,
       );
+    });
+
+    // Only 4 bits are available for the iteration exponent, so 15 is the
+    // largest encodable value. 16 used to pass validation and then overflow
+    // into the extendable backup flag, producing unrecoverable shares.
+    // Exercised at the encoding layer because a round trip at a high exponent
+    // would run hundreds of millions of PBKDF2 iterations.
+    it("should encode every valid iteration exponent without corrupting the header", () => {
+      const identifier = helper.generateIdentifier();
+      for (let flag = 0; flag <= 1; flag++) {
+        for (let exp = 0; exp <= 15; exp++) {
+          const mnemonic = helper.encodeMnemonic(
+            identifier,
+            flag,
+            exp,
+            0,
+            1,
+            1,
+            0,
+            1,
+            MS,
+          );
+          assert(
+            helper.validateMnemonic(mnemonic),
+            `exponent ${exp} with extendable backup flag ${flag} produced an invalid mnemonic`,
+          );
+        }
+      }
+    });
+
+    it("should throw an Error when the iteration exponent exceeds 4 bits", () => {
+      [0, 1].forEach((flag) => {
+        assert.throws(
+          () =>
+            slip39.fromArray(MS, {
+              iterationExponent: 16,
+              extendableBackupFlag: flag,
+            }),
+          Error,
+        );
+      });
     });
   });
 });
