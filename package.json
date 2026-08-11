@@ -3,8 +3,20 @@
   "version": "0.1.9",
   "description": "The javascript implementation of the SLIP39 for Shamir's Secret-Sharing for Mnemonic Codes.",
   "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "src/",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=12"
+  },
   "scripts": {
-    "test": "mocha"
+    "test": "mocha",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "author": "Pal Dorogi \"iLap\" <pal.dorogi@gmail.com>",
   "license": "MIT",
@@ -21,6 +33,8 @@
     "SSS"
   ],
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
     "mocha": "^10.4.0"
   }
 }

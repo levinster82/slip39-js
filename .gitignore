@@ -95,4 +95,6 @@ typings/
 .DS_Store
 .npmrc
 .lock-wscript
-package-lock.json*
+
+# Local review notes
+REVIEW-CHECKLIST.md
