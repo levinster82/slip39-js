@@ -122,6 +122,17 @@ byte values. Throws if the set is insufficient, inconsistent, or corrupt.
 Returns whether a single mnemonic string is well formed, without attempting
 recovery.
 
+### `Slip39.fromJson(masterSecret, json, options?)`
+
+Splits `masterSecret` according to a JSON description of the share tree, which
+also lets you name individual shares. See
+[JSON representation](#json-representation).
+
+### `slip.toJson(options?)`
+
+Serialises the share tree back to the `fromJson` shape. Mnemonics are omitted
+unless you pass `{ mnemonics: true }`.
+
 ### `slip.fromPath(path)`
 
 Returns the node at `path` (`"r"`, `"r/0"`, `"r/3/1"`). Each node exposes
@@ -190,39 +201,79 @@ validation cases.
         deliberately not adopted: these are pure functions, and wrapping them
         in classes would add indirection without adding structure. Open
         question whether any further grouping is worth doing.
-- [ ] Add `JSON` representation, see [JSON representation](#json-representation) below.
+- [x] Add `JSON` representation, see [JSON representation](#json-representation) below.
 - [ ] Refactor to much simpler code.
 
 ### JSON Representation
 
-```json
-{
-  "name": "Slip39",
-  "threshold": 2,
-  "shares": [
+As an alternative to the array form, the share tree can be described as JSON,
+which additionally lets you name each individual share. The outer `shares`
+lists the groups; each group's `shares` names its members, one entry per
+member, so its length is the member count.
+
+```javascript
+const config = {
+  name: "Alice's shares",
+  threshold: 2,
+  shares: [
+    { name: "Primary", threshold: 1, shares: ["Primary share"] },
+    { name: "Secondary", threshold: 1, shares: ["Secondary share"] },
     {
-      "name": "My Primary",
-      "threshold": 1,
-      "shares": ["Primary"]
+      name: "Friends",
+      threshold: 3,
+      shares: ["Albert", "Ben", "Carol", "David", "Edward", "Fred"],
     },
     {
-      "name": "My Secondary",
-      "threshold": 1,
-      "shares": ["Secondary"]
+      name: "Family",
+      threshold: 2,
+      shares: ["Adam", "Brenda", "Cecil", "Donald", "Elissa"],
     },
-    {
-      "name": "Friends",
-      "threshold": 3,
-      "shares": ["Alice", "Bob", "Charlie", "David", "Erin"]
-    },
-    {
-      "name": "Family",
-      "threshold": 2,
-      "shares": ["Adam", "Brenda", "Carol", "Dan", "Edward", "Frank"]
-    }
-  ]
-}
+  ],
+};
+
+const slip = slip39.fromJson(masterSecret, config, { passphrase: "TREZOR" });
+
+slip.fromPath("r/2/0").description; // "Albert"
 ```
+
+`fromJson(masterSecret, json, options?)` accepts the description as an object
+or a JSON string. `options` takes the same `passphrase`, `iterationExponent`
+and `extendableBackupFlag` as `fromArray`.
+
+This shape matches the one used by the author's
+[Dart implementation](https://github.com/ilap/slip39-dart), so the same
+configuration works in both. Note that SLIP-39 itself defines no JSON format,
+and Trezor's reference implementation has no concept of naming groups or
+shares at all: **names are local metadata only**. They are never encoded into
+the mnemonics and do not affect the cryptography.
+
+#### Serialising back out
+
+`toJson()` returns the same shape, so it round trips:
+
+```javascript
+slip39.fromJson(masterSecret, config).toJson(); // deep-equals config
+```
+
+Mnemonics are omitted by default, so logging or stringifying a `Slip39` cannot
+leak seeds by accident. Pass `{ mnemonics: true }` to include them:
+
+```javascript
+slip.toJson({ mnemonics: true });
+// {
+//   name: "Alice's shares",
+//   threshold: 2,
+//   shares: [
+//     { name: "Friends", threshold: 3,
+//       shares: [{ name: "Albert", mnemonic: "academic acid ..." }, ...] },
+//     ...
+//   ]
+// }
+```
+
+> **Warning:** the output of `toJson({ mnemonics: true })` is secret material.
+> It reconstructs the master secret. Do not log it or write it out
+> unencrypted.
 
 # LICENSE
 

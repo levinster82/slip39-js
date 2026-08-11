@@ -39,6 +39,31 @@ v0.1.9
 
 - feat: Exported word list.
 
+v0.4.0-levinster82.1
+
+Features
+
+- `Slip39.fromJson(masterSecret, json, options?)` builds a share tree from a
+  JSON description, which additionally names each individual share. Accepts an
+  object or a JSON string. This implements the long-standing README TODO.
+
+  The shape matches the author's Dart implementation, so one configuration
+  works in both. SLIP-39 defines no JSON format and Trezor's reference
+  implementation has no notion of naming groups or shares, so names are local
+  metadata: never encoded into the mnemonics, no effect on the cryptography.
+
+- `slip.toJson(options?)` serialises the tree back to the same shape, so
+  `fromJson(ms, config).toJson()` deep-equals `config`. Mnemonics are omitted
+  by default so that logging or stringifying a Slip39 cannot leak seeds;
+  `toJson({ mnemonics: true })` includes them and is secret material.
+
+- `Slip39Node` gained a `threshold` property, recording how many members a
+  group needs, so the tree can be serialised. 0 on leaves and on the root.
+
+- Leaf nodes now carry their own `description` when built via `fromJson`.
+  Trees built with `fromArray` are unchanged: members still inherit the
+  group's description.
+
 v0.3.0-levinster82.1
 
 Breaking

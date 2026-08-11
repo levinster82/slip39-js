@@ -370,6 +370,190 @@ describe("Invalid Shares", () => {
   });
 });
 
+describe("JSON representation", () => {
+  // The shape used by the sibling Dart implementation, so the same config
+  // works in both. SLIP-39 itself defines no JSON format, and Trezor's
+  // reference implementation has no concept of naming groups or shares.
+  const CONFIG = {
+    name: "Alice's shares",
+    threshold: 2,
+    shares: [
+      { name: "Primary", threshold: 1, shares: ["Primary share"] },
+      { name: "Secondary", threshold: 1, shares: ["Secondary share"] },
+      {
+        name: "Friends",
+        threshold: 3,
+        shares: ["Albert", "Ben", "Carol", "David", "Edward", "Fred"],
+      },
+      {
+        name: "Family",
+        threshold: 2,
+        shares: ["Adam", "Brenda", "Cecil", "Donald", "Elissa"],
+      },
+    ],
+  };
+
+  describe("fromJson", () => {
+    it("should build the tree described by the JSON", () => {
+      const slip = slip39.fromJson(MS, CONFIG, { passphrase: PASSPHRASE });
+
+      assert.strictEqual(slip.groupThreshold, 2);
+      assert.strictEqual(slip.groupCount, 4);
+      assert.strictEqual(slip.fromPath("r").description, "Alice's shares");
+      assert.strictEqual(slip.fromPath("r/2").description, "Friends");
+      assert.strictEqual(slip.fromPath("r/2").children.length, 6);
+    });
+
+    it("should name each member individually", () => {
+      const slip = slip39.fromJson(MS, CONFIG);
+
+      assert.strictEqual(slip.fromPath("r/2/0").description, "Albert");
+      assert.strictEqual(slip.fromPath("r/2/5").description, "Fred");
+      assert.strictEqual(slip.fromPath("r/3/1").description, "Brenda");
+    });
+
+    it("should accept a JSON string as well as an object", () => {
+      const fromString = slip39.fromJson(MS, JSON.stringify(CONFIG));
+
+      assert.deepStrictEqual(fromString.toJson(), CONFIG);
+    });
+
+    it("should produce mnemonics that recover the master secret", () => {
+      const slip = slip39.fromJson(MS, CONFIG, { passphrase: PASSPHRASE });
+
+      // Two of four groups: Primary in full, plus three of six Friends.
+      const shares = slip
+        .fromPath("r/0")
+        .mnemonics.concat(slip.fromPath("r/2").mnemonics.slice(0, 3));
+
+      assert.strictEqual(
+        MS.slip39DecodeHex(),
+        slip39.recoverSecret(shares, PASSPHRASE).slip39DecodeHex(),
+      );
+    });
+
+    it("should pass the crypto options through", () => {
+      const slip = slip39.fromJson(MS, CONFIG, {
+        passphrase: PASSPHRASE,
+        iterationExponent: 1,
+        extendableBackupFlag: 0,
+      });
+
+      assert.strictEqual(slip.iterationExponent, 1);
+      assert.strictEqual(slip.extendableBackupFlag, 0);
+      assert.strictEqual(
+        MS.slip39DecodeHex(),
+        slip39
+          .recoverSecret(
+            slip
+              .fromPath("r/0")
+              .mnemonics.concat(slip.fromPath("r/1").mnemonics),
+            PASSPHRASE,
+          )
+          .slip39DecodeHex(),
+      );
+    });
+
+    it("should still apply the underlying group validation", () => {
+      // Member threshold 1 with more than one member is not allowed.
+      assert.throws(
+        () =>
+          slip39.fromJson(MS, {
+            name: "bad",
+            threshold: 1,
+            shares: [{ name: "g", threshold: 1, shares: ["a", "b"] }],
+          }),
+        Error,
+      );
+    });
+
+    const invalid = [
+      ["not an object", "nope"],
+      ["an array at the top level", [[1, 1]]],
+      ["a missing shares array", { name: "x", threshold: 1 }],
+      [
+        "a group that is not an object",
+        { threshold: 1, shares: [[1, 1]] },
+      ],
+      [
+        "a group with no members",
+        { threshold: 1, shares: [{ name: "g", threshold: 1, shares: [] }] },
+      ],
+      [
+        "a member that is not a string",
+        {
+          threshold: 1,
+          shares: [{ name: "g", threshold: 2, shares: ["a", 7] }],
+        },
+      ],
+    ];
+
+    invalid.forEach((item) => {
+      it(`should reject ${item[0]}`, () => {
+        assert.throws(() => slip39.fromJson(MS, item[1]), Error);
+      });
+    });
+  });
+
+  describe("toJson", () => {
+    it("should round trip exactly", () => {
+      const slip = slip39.fromJson(MS, CONFIG, { passphrase: PASSPHRASE });
+
+      assert.deepStrictEqual(slip.toJson(), CONFIG);
+    });
+
+    it("should omit mnemonics by default", () => {
+      const slip = slip39.fromJson(MS, CONFIG);
+      const json = JSON.stringify(slip.toJson());
+
+      slip.fromPath("r").mnemonics.forEach((mnemonic) => {
+        assert(
+          !json.includes(mnemonic),
+          "toJson() must not leak mnemonics by default",
+        );
+      });
+    });
+
+    it("should include mnemonics when asked", () => {
+      const slip = slip39.fromJson(MS, CONFIG, { passphrase: PASSPHRASE });
+      const json = slip.toJson({ mnemonics: true });
+
+      assert.strictEqual(json.shares[2].shares[0].name, "Albert");
+      assert.strictEqual(
+        json.shares[2].shares[0].mnemonic,
+        slip.fromPath("r/2/0").mnemonic,
+      );
+
+      const shares = [json.shares[0].shares[0].mnemonic].concat(
+        json.shares[2].shares.slice(0, 3).map((share) => share.mnemonic),
+      );
+      assert.strictEqual(
+        MS.slip39DecodeHex(),
+        slip39.recoverSecret(shares, PASSPHRASE).slip39DecodeHex(),
+      );
+    });
+
+    it("should serialise a tree built with fromArray", () => {
+      const slip = slip39.fromArray(MS, {
+        threshold: 1,
+        groups: [[2, 3, "Group 0"]],
+        title: "Array built",
+      });
+      const json = slip.toJson();
+
+      assert.strictEqual(json.name, "Array built");
+      assert.strictEqual(json.threshold, 1);
+      assert.strictEqual(json.shares[0].threshold, 2);
+      // Without per-member names, members inherit the group description.
+      assert.deepStrictEqual(json.shares[0].shares, [
+        "Group 0",
+        "Group 0",
+        "Group 0",
+      ]);
+    });
+  });
+});
+
 describe("Built-in prototype extensions", () => {
   it("should not leak into for...in loops over arrays", () => {
     const keys = [];

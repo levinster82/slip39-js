@@ -27,6 +27,45 @@ interface Slip39Options {
 }
 
 /**
+ * A JSON description of a share tree, matching the shape used by the sibling
+ * Dart implementation. The outer `shares` lists the groups; each group's
+ * `shares` names its members, one entry per member.
+ *
+ * Names are local metadata: they are not encoded into the mnemonics and do not
+ * affect the cryptography.
+ */
+interface Slip39Json {
+  /** Title for the whole set. */
+  name?: string;
+  /** How many groups are needed to reconstruct the master secret. */
+  threshold?: number;
+  shares: Array<{
+    name?: string;
+    /** How many of this group's members are needed. */
+    threshold?: number;
+    /** One name per member. Its length is the member count. */
+    shares: string[];
+  }>;
+}
+
+/** The result of `toJson({ mnemonics: true })`. */
+interface Slip39JsonWithMnemonics {
+  name: string;
+  threshold: number;
+  shares: Array<{
+    name: string;
+    threshold: number;
+    shares: Array<{ name: string; mnemonic: string }>;
+  }>;
+}
+
+interface Slip39JsonOptions {
+  passphrase?: string;
+  iterationExponent?: number;
+  extendableBackupFlag?: number;
+}
+
+/**
  * A node in the share tree. The root is the whole set, level-two nodes are the
  * groups, and the leaves carry the generated mnemonics.
  */
@@ -36,12 +75,15 @@ declare class Slip39Node {
     description?: string,
     mnemonic?: string,
     children?: Slip39Node[],
+    threshold?: number,
   );
 
   index: number;
   description: string;
   mnemonic: string;
   children: Slip39Node[];
+  /** For a group node, how many members are needed. 0 on leaves and the root. */
+  threshold: number;
 
   /** Every mnemonic at or below this node. */
   readonly mnemonics: string[];
@@ -69,6 +111,35 @@ declare class Slip39 {
    * @param masterSecret Byte values. At least 16 bytes, and an even length.
    */
   static fromArray(masterSecret: number[], options?: Slip39Options): Slip39;
+
+  /**
+   * Splits a master secret according to a JSON description of the share tree.
+   *
+   * @param json The description, as an object or a JSON string.
+   */
+  static fromJson(
+    masterSecret: number[],
+    json: Slip39Json | string,
+    options?: Slip39JsonOptions,
+  ): Slip39;
+
+  /** Validates a JSON description and converts it to `fromArray` groups. */
+  static parseJson(json: Slip39Json | string): {
+    title?: string;
+    threshold: number;
+    groups: Array<[number, number, string, string[]]>;
+  };
+
+  /**
+   * Serialises the share tree back to the `fromJson` shape, so the result
+   * round trips. Mnemonics are omitted unless asked for.
+   */
+  toJson(options?: { mnemonics?: false }): Slip39Json;
+  /**
+   * THE RESULT IS SECRET MATERIAL: it reconstructs the master secret. Do not
+   * log it or write it out unencrypted.
+   */
+  toJson(options: { mnemonics: true }): Slip39JsonWithMnemonics;
 
   /** Recombines mnemonic shares into the original master secret. */
   static recoverSecret(mnemonics: string[], passphrase?: string): number[];
