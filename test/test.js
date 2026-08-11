@@ -1,5 +1,6 @@
 const assert = require("assert");
 const slip39 = require("../src/slip39");
+const helper = require("../src/slip39_helper");
 
 const MASTERSECRET = "ABCDEFGHIJKLMNOP";
 const MS = MASTERSECRET.slip39EncodeHex();
@@ -92,6 +93,38 @@ describe("Basic Tests", () => {
           slip39.recoverSecret(nopwMnemonics.slice(0, 5)).slip39DecodeHex(),
       );
     });
+
+    // SLIP-39 encodes the passphrase as NFKD-normalized UTF-8. The previous
+    // charCodeAt encoding truncated anything above U+00FF to a single byte.
+    it("should round trip a non-ASCII passphrase", () => {
+      const passphrase = "hēllo wörld 🔐";
+      const slip = slip39.fromArray(MS, { passphrase: passphrase });
+      assert.strictEqual(
+        MS.slip39DecodeHex(),
+        slip39
+          .recoverSecret(slip.fromPath("r").mnemonics, passphrase)
+          .slip39DecodeHex(),
+      );
+    });
+
+    it("should treat canonically equivalent passphrases as identical", () => {
+      // U+00E9 vs. U+0065 U+0301 - different code points, same NFKD form.
+      const composed = "café";
+      const decomposed = "café";
+      assert.notStrictEqual(composed, decomposed);
+
+      const slip = slip39.fromArray(MS, { passphrase: composed });
+      assert.strictEqual(
+        MS.slip39DecodeHex(),
+        slip39
+          .recoverSecret(slip.fromPath("r").mnemonics, decomposed)
+          .slip39DecodeHex(),
+      );
+    });
+
+    it("should throw when the passphrase is not a string", () => {
+      assert.throws(() => slip39.fromArray(MS, { passphrase: 1234 }), Error);
+    });
   });
 
   describe("Test iteration exponent", () => {
@@ -144,6 +177,47 @@ describe("Basic Tests", () => {
         Error,
       );
     });
+
+    // Only 4 bits are available for the iteration exponent, so 15 is the
+    // largest encodable value. 16 used to pass validation and then overflow
+    // into the extendable backup flag, producing unrecoverable shares.
+    // Exercised at the encoding layer because a round trip at a high exponent
+    // would run hundreds of millions of PBKDF2 iterations.
+    it("should encode every valid iteration exponent without corrupting the header", () => {
+      const identifier = helper.generateIdentifier();
+      for (let flag = 0; flag <= 1; flag++) {
+        for (let exp = 0; exp <= 15; exp++) {
+          const mnemonic = helper.encodeMnemonic(
+            identifier,
+            flag,
+            exp,
+            0,
+            1,
+            1,
+            0,
+            1,
+            MS,
+          );
+          assert(
+            helper.validateMnemonic(mnemonic),
+            `exponent ${exp} with extendable backup flag ${flag} produced an invalid mnemonic`,
+          );
+        }
+      }
+    });
+
+    it("should throw an Error when the iteration exponent exceeds 4 bits", () => {
+      [0, 1].forEach((flag) => {
+        assert.throws(
+          () =>
+            slip39.fromArray(MS, {
+              iterationExponent: 16,
+              extendableBackupFlag: flag,
+            }),
+          Error,
+        );
+      });
+    });
   });
 });
 
@@ -186,11 +260,16 @@ describe("Group Sharing Tests", () => {
           slip39.recoverSecret(mnemonics).slip39DecodeHex(),
       );
     });
-    it("TODO: Should NOT return the valid master secret when one complete group and one incomplete group out of two groups required", () => {
-      assert(true);
+    it("Should NOT return the valid master secret when one complete group and one incomplete group out of two groups required", () => {
+      // Group 3 is complete (1-of-1). Group 2 needs 2 members but supplies 1.
+      const mnemonics = group2Mnemonics.slice(0, 1).concat(group3Mnemonic);
+
+      assert.throws(() => slip39.recoverSecret(mnemonics), Error);
     });
-    it("TODO: Should return the valid master secret when one group of two required but only one applied.", () => {
-      assert(true);
+
+    it("Should NOT return the valid master secret when one group of two required but only one applied.", () => {
+      // A complete group, but the group threshold of 2 is not met.
+      assert.throws(() => slip39.recoverSecret([group3Mnemonic]), Error);
     });
   });
 });
@@ -288,6 +367,36 @@ describe("Invalid Shares", () => {
         Error,
       );
     });
+  });
+});
+
+describe("Built-in prototype extensions", () => {
+  it("should not leak into for...in loops over arrays", () => {
+    const keys = [];
+    for (const key in [1, 2, 3]) {
+      keys.push(key);
+    }
+    assert.deepStrictEqual(keys, ["0", "1", "2"]);
+  });
+
+  it("should not leak into for...in loops over strings", () => {
+    assert.deepStrictEqual(Object.keys(String.prototype), []);
+  });
+
+  it("should keep the documented methods working", () => {
+    assert.deepStrictEqual("AB".slip39EncodeHex(), [65, 66]);
+    assert.strictEqual([65, 66].slip39DecodeHex(), "AB");
+    assert.deepStrictEqual(
+      Array().slip39Generate(3, (i) => i * 2),
+      [0, 2, 4],
+    );
+    assert.strictEqual([255, 1].toHexString(), "ff01");
+    assert.deepStrictEqual([].toByteArray("ff01"), [255, 1]);
+  });
+
+  it("should keep slip39Generate mutating and returning the receiver", () => {
+    const target = [9, 9];
+    assert.strictEqual(target.slip39Generate(0), target);
   });
 });
 
@@ -397,12 +506,12 @@ describe("Groups test (T=1, N=1 e.g. [1,1]) - ", () => {
   let groups = Array.from(Array(totalGroups), () => [1, 1]);
 
   for (
-    extendableBackupFlag = 0;
+    let extendableBackupFlag = 0;
     extendableBackupFlag <= 1;
     extendableBackupFlag++
   ) {
-    for (group = 1; group <= totalGroups; group++) {
-      for (threshold = 1; threshold <= group; threshold++) {
+    for (let group = 1; group <= totalGroups; group++) {
+      for (let threshold = 1; threshold <= group; threshold++) {
         itTestArray(threshold, group, groups, extendableBackupFlag);
       }
     }

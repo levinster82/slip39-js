@@ -1,4 +1,3 @@
-/* eslint-disable radix */
 const slipHelper = require("./slip39_helper.js");
 
 const MAX_DEPTH = 2;
@@ -69,11 +68,10 @@ class Slip39 {
       );
     }
 
-    if (!/^[\x20-\x7E]*$/.test(passphrase)) {
-      throw Error(
-        "The passphrase must contain only printable ASCII characters (code points 32-126).",
-      );
-    }
+    // Note: SLIP-39 recommends, but does not require, restricting the
+    // passphrase to printable ASCII (code points 32-126) for the widest
+    // interoperability. Anything outside that range is encoded as NFKD UTF-8
+    // per the spec, and may not be readable by other implementations.
 
     if (threshold > groups.length) {
       throw Error(
@@ -154,7 +152,7 @@ class Slip39 {
       const d = item[2] || "";
 
       // Generate leaf members, means their `m` is `0`
-      const members = Array().slip39Generate(m, () => [n, 0, d]);
+      const members = slipHelper.generate(m, () => [n, 0, d]);
 
       const node = new Slip39Node(idx, d);
       const branch = this.buildRecursive(
@@ -210,7 +208,7 @@ class Slip39 {
     const pathLength = depth.length - 1;
     if (pathLength > MAX_DEPTH) {
       throw new Error(
-        `Path\'s (${path}) max depth (${MAX_DEPTH}) is exceeded (${pathLength}).`,
+        `Path's (${path}) max depth (${MAX_DEPTH}) is exceeded (${pathLength}).`,
       );
     }
   }

@@ -1,9 +1,8 @@
-/* eslint-disable no-array-constructor */
 let crypto;
 try {
   crypto = require("crypto");
 } catch (err) {
-  throw new Error("crypto support must be enabled");
+  throw new Error("crypto support must be enabled", { cause: err });
 }
 
 // The length of the radix in bits.
@@ -29,8 +28,9 @@ const ITERATION_EXP_WORDS_LENGTH = parseInt(
   10,
 );
 
-// The maximum iteration exponent
-const MAX_ITERATION_EXP = Math.pow(2, ITERATION_EXP_BITS_LENGTH);
+// The maximum iteration exponent. Only ITERATION_EXP_BITS_LENGTH bits are
+// available in the mnemonic, so the largest encodable value is 2**n - 1.
+const MAX_ITERATION_EXP = Math.pow(2, ITERATION_EXP_BITS_LENGTH) - 1;
 
 // The maximum number of shares that can be created.
 const MAX_SHARE_COUNT = 16;
@@ -75,45 +75,113 @@ const SECRET_INDEX = 255;
 //
 // Helper functions for SLIP39 implementation.
 //
-String.prototype.slip39EncodeHex = function () {
+// These are plain module-local functions. The library does not rely on the
+// built-in prototypes it patches below, so a consumer (or another dependency)
+// clobbering one of those methods cannot break it.
+//
+function encodeHex(str) {
   let bytes = [];
-  for (let i = 0; i < this.length; ++i) {
-    bytes.push(this.charCodeAt(i));
+  for (let i = 0; i < str.length; ++i) {
+    bytes.push(str.charCodeAt(i));
   }
   return bytes;
-};
+}
 
-Array.prototype.slip39DecodeHex = function () {
+function decodeHex(bytes) {
   let str = [];
-  const hex = this.toString().split(",");
+  const hex = bytes.toString().split(",");
   for (let i = 0; i < hex.length; i++) {
     str.push(String.fromCharCode(hex[i]));
   }
   return str.toString().replace(/,/g, "");
-};
+}
 
-Array.prototype.slip39Generate = function (m, v = (_) => _) {
-  let n = m || this.length;
-  for (let i = 0; i < n; i++) {
-    this[i] = v(i);
+function generate(m, v = (_) => _) {
+  const result = [];
+  for (let i = 0; i < m; i++) {
+    result[i] = v(i);
   }
-  return this;
-};
+  return result;
+}
 
-Array.prototype.toHexString = function () {
+function toHexString(bytes) {
   return Array.prototype.map
-    .call(this, function (byte) {
+    .call(bytes, function (byte) {
       return ("0" + (byte & 0xff).toString(16)).slice(-2);
     })
     .join("");
-};
+}
 
-Array.prototype.toByteArray = function (hexString) {
-  for (let i = 0; i < hexString.length; i = i + 2) {
-    this.push(parseInt(hexString.substr(i, 2), 16));
+//
+// Encodes the passphrase as SLIP-39 requires: NFKD-normalized UTF-8.
+//
+// This is deliberately not `encodeHex`, which reads UTF-16 code units and
+// truncates them to bytes. The two agree for ASCII but not beyond it.
+//
+function encodePassphrase(passphrase) {
+  if (typeof passphrase !== "string") {
+    throw new Error(
+      `The passphrase must be a string. Instead found typeof ${typeof passphrase}.`,
+    );
   }
-  return this;
-};
+
+  return Array.prototype.slice.call(
+    Buffer.from(passphrase.normalize("NFKD"), "utf8"),
+    0,
+  );
+}
+
+function toByteArray(target, hexString) {
+  for (let i = 0; i < hexString.length; i = i + 2) {
+    target.push(parseInt(hexString.substr(i, 2), 16));
+  }
+  return target;
+}
+
+//
+// Backwards-compatible prototype extensions.
+//
+// Retained because the documented public API uses them (see README), but
+// defined as non-enumerable so they no longer leak into `for...in` loops over
+// arrays and strings anywhere else in the host application. Prefer the
+// exported `encodeHex` / `decodeHex` functions in new code.
+//
+function definePrototypeMethod(target, name, fn) {
+  Object.defineProperty(target, name, {
+    value: fn,
+    writable: true,
+    configurable: true,
+    enumerable: false,
+  });
+}
+
+definePrototypeMethod(String.prototype, "slip39EncodeHex", function () {
+  return encodeHex(String(this));
+});
+
+definePrototypeMethod(Array.prototype, "slip39DecodeHex", function () {
+  return decodeHex(this);
+});
+
+definePrototypeMethod(
+  Array.prototype,
+  "slip39Generate",
+  function (m, v = (_) => _) {
+    const values = generate(m || this.length, v);
+    values.forEach((value, i) => {
+      this[i] = value;
+    });
+    return this;
+  },
+);
+
+definePrototypeMethod(Array.prototype, "toHexString", function () {
+  return toHexString(this);
+});
+
+definePrototypeMethod(Array.prototype, "toByteArray", function (hexString) {
+  return toByteArray(this, hexString);
+});
 
 const BIGINT_WORD_BITS = BigInt(8);
 
@@ -153,15 +221,11 @@ function encodeBigInt(number, paddedLength = 0) {
 }
 
 function bitsToBytes(n) {
-  const res = (n + 7) / 8;
-  const b = parseInt(res, RADIX_BITS);
-  return b;
+  return Math.ceil(n / 8);
 }
 
 function bitsToWords(n) {
-  const res = (n + RADIX_BITS - 1) / RADIX_BITS;
-  const b = parseInt(res, RADIX_BITS);
-  return b;
+  return Math.ceil(n / RADIX_BITS);
 }
 
 //
@@ -208,11 +272,11 @@ function crypt(
   let IL = masterSecret.slice().slice(0, masterSecret.length / 2);
   let IR = masterSecret.slice().slice(masterSecret.length / 2);
 
-  const pwd = passphrase.slip39EncodeHex();
+  const pwd = encodePassphrase(passphrase);
 
   const salt = getSalt(identifier, extendableBackupFlag);
 
-  let range = Array().slip39Generate(ROUND_COUNT);
+  let range = generate(ROUND_COUNT);
   range = encrypt ? range : range.reverse();
 
   range.forEach((round) => {
@@ -253,8 +317,9 @@ function splitSecret(threshold, shareCount, sharedSecret) {
     );
   }
   //  If the threshold is 1, then the digest of the shared secret is not used.
+  //  Each share gets its own copy so that mutating one cannot corrupt the rest.
   if (threshold === 1) {
-    return Array().slip39Generate(shareCount, () => sharedSecret);
+    return generate(shareCount, () => sharedSecret.slice());
   }
 
   const randomShareCount = threshold - 2;
@@ -265,7 +330,7 @@ function splitSecret(threshold, shareCount, sharedSecret) {
   let baseShares = new Map();
   let shares = [];
   if (randomShareCount) {
-    shares = Array().slip39Generate(randomShareCount, () =>
+    shares = generate(randomShareCount, () =>
       randomBytes(sharedSecret.length),
     );
     shares.forEach((item, idx) => {
@@ -302,20 +367,19 @@ function xor(a, b) {
       `Invalid padding in mnemonic or insufficient length of mnemonics (${a.length} or ${b.length})`,
     );
   }
-  return Array().slip39Generate(a.length, (i) => a[i] ^ b[i]);
+  return generate(a.length, (i) => a[i] ^ b[i]);
 }
 
 function getSalt(identifier, extendableBackupFlag) {
   if (extendableBackupFlag) {
     return [];
   } else {
-    const salt = CUSTOMIZATION_STRING_NON_EXTENDABLE.slip39EncodeHex();
+    const salt = encodeHex(CUSTOMIZATION_STRING_NON_EXTENDABLE);
     return salt.concat(identifier);
   }
 }
 
 function interpolate(shares, x) {
-  let xCoord = new Set(shares.keys());
   let arr = Array.from(shares.values(), (v) => v.length);
   let sharesValueLengths = new Set(arr);
 
@@ -325,12 +389,10 @@ function interpolate(shares, x) {
     );
   }
 
-  if (xCoord.has(x)) {
-    shares.forEach((v, k) => {
-      if (k === x) {
-        return v;
-      }
-    });
+  // The share is already known, so there is nothing to interpolate. Returning
+  // early also avoids evaluating LOG_TABLE[0], which is undefined in GF(256).
+  if (shares.has(x)) {
+    return shares.get(x);
   }
 
   // Logarithm of the product of (x_i - x) for i = 1, ... , k.
@@ -340,7 +402,7 @@ function interpolate(shares, x) {
     logProd = logProd + LOG_TABLE[k ^ x];
   });
 
-  let results = Array().slip39Generate(
+  let results = generate(
     sharesValueLengths.values().next().value,
     () => 0,
   );
@@ -400,14 +462,14 @@ function get_customization_string(extendableBackupFlag) {
 }
 
 function rs1024CreateChecksum(data, extendableBackupFlag) {
-  const values = get_customization_string(extendableBackupFlag)
-    .slip39EncodeHex()
+  const values = encodeHex(get_customization_string(extendableBackupFlag))
     .concat(data)
-    .concat(Array().slip39Generate(CHECKSUM_WORDS_LENGTH, () => 0));
+    .concat(generate(CHECKSUM_WORDS_LENGTH, () => 0));
   const polymod = rs1024Polymod(values) ^ 1;
-  const result = Array()
-    .slip39Generate(CHECKSUM_WORDS_LENGTH, (i) => (polymod >> (10 * i)) & 1023)
-    .reverse();
+  const result = generate(
+    CHECKSUM_WORDS_LENGTH,
+    (i) => (polymod >> (10 * i)) & 1023,
+  ).reverse();
 
   return result;
 }
@@ -415,9 +477,7 @@ function rs1024CreateChecksum(data, extendableBackupFlag) {
 function rs1024VerifyChecksum(data, extendableBackupFlag) {
   return (
     rs1024Polymod(
-      get_customization_string(extendableBackupFlag)
-        .slip39EncodeHex()
-        .concat(data),
+      encodeHex(get_customization_string(extendableBackupFlag)).concat(data),
     ) === 1
   );
 }
@@ -440,7 +500,7 @@ function intFromIndices(indices) {
 //
 function intToIndices(value, length, bits) {
   const mask = BigInt((1 << bits) - 1);
-  const result = Array().slip39Generate(length, (i) =>
+  const result = generate(length, (i) =>
     parseInt((value >> (BigInt(i) * BigInt(bits))) & mask, 10),
   );
   return result.reverse();
@@ -701,7 +761,7 @@ function decodeMnemonic(mnemonic) {
       share: share,
     };
   } catch (e) {
-    throw new Error(`Invalid mnemonic padding (${e})`);
+    throw new Error(`Invalid mnemonic padding (${e})`, { cause: e });
   }
 }
 
@@ -709,7 +769,7 @@ function validateMnemonic(mnemonic) {
   try {
     decodeMnemonic(mnemonic);
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -738,15 +798,15 @@ function groupPrefix(
   return indc;
 }
 
+//
+// Compares two byte lists without leaking their contents through timing.
+//
 function listsAreEqual(a, b) {
   if (a === null || b === null || a.length !== b.length) {
     return false;
   }
 
-  let i = 0;
-  return a.every((item) => {
-    return b[i++] === item;
-  });
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
 //
@@ -1886,4 +1946,8 @@ exports = module.exports = {
   crypt,
   bitsToBytes,
   WORD_LIST,
+  // Prototype-free equivalents of the patched built-in methods.
+  encodeHex,
+  decodeHex,
+  generate,
 };
