@@ -180,7 +180,16 @@ validation cases.
 
 - [x] Add unit tests.
 - [x] Test with the reference code's test vectors.
-- [ ] Refactor the helpers to different helper classes e.g. `CryptoHelper()`, `ShamirHelper()` etc.
+- [ ] Refactor the helpers.
+  - [x] Split the word list and the GF(256) exponent/log tables out of
+        `slip39_helper.js` into `src/wordlist.js` and `src/gf256.js`, taking
+        that file from 1955 lines down to 872 lines of logic.
+  - [x] Replace the built-in prototype patching with plain functions
+        internally, keeping the old methods as non-enumerable shims.
+  - [ ] The original `CryptoHelper()` / `ShamirHelper()` class split was
+        deliberately not adopted: these are pure functions, and wrapping them
+        in classes would add indirection without adding structure. Open
+        question whether any further grouping is worth doing.
 - [ ] Add `JSON` representation, see [JSON representation](#json-representation) below.
 - [ ] Refactor to much simpler code.
 
