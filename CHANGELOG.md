@@ -39,7 +39,12 @@ v0.1.9
 
 - feat: Exported word list.
 
-v0.1.10 (unreleased)
+v0.2.0-levinster82.1
+
+Fork release, not published to npm. The `slip39` package on npm is maintained
+by ilap and remains at v0.1.9; this fork is consumed directly from git. The
+`-levinster82` suffix keeps the version from ever colliding with an upstream
+release.
 
 Fixes
 
