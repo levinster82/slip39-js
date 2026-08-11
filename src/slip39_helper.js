@@ -800,14 +800,22 @@ function groupPrefix(
 }
 
 //
-// Compares two byte lists without leaking their contents through timing.
+// Compares two byte lists without leaking their contents through timing:
+// always walks the full length of both inputs so equality/inequality cannot
+// be inferred from how quickly the function returns. Mirrors the algorithm
+// crypto.timingSafeEqual uses, without depending on it, so this comparison
+// has no Node-only runtime dependency.
 //
 function listsAreEqual(a, b) {
   if (a === null || b === null || a.length !== b.length) {
     return false;
   }
 
-  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a[i] ^ b[i];
+  }
+  return diff === 0;
 }
 
 //
@@ -861,6 +869,9 @@ exports = module.exports = {
   crypt,
   bitsToBytes,
   WORD_LIST,
+  // Constant-time comparison used to check the shared-secret digest.
+  // Exported for direct testing; not otherwise part of the public API.
+  listsAreEqual,
   // Prototype-free equivalents of the patched built-in methods.
   encodeHex,
   decodeHex,

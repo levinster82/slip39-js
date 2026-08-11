@@ -592,6 +592,25 @@ describe("Built-in prototype extensions", () => {
   });
 });
 
+describe("listsAreEqual", () => {
+  it("should be true for equal arrays", () => {
+    assert.strictEqual(helper.listsAreEqual([1, 2, 3], [1, 2, 3]), true);
+  });
+
+  it("should be false for arrays of different length", () => {
+    assert.strictEqual(helper.listsAreEqual([1, 2, 3], [1, 2]), false);
+  });
+
+  it("should be false for same-length arrays differing in one byte", () => {
+    assert.strictEqual(helper.listsAreEqual([1, 2, 3], [1, 9, 3]), false);
+  });
+
+  it("should be false when either argument is null", () => {
+    assert.strictEqual(helper.listsAreEqual(null, [1, 2, 3]), false);
+    assert.strictEqual(helper.listsAreEqual([1, 2, 3], null), false);
+  });
+});
+
 describe("Mnemonic Validation", () => {
   describe("Valid Mnemonics", () => {
     let mnemonics = slip15.fromPath("r/0").mnemonics;

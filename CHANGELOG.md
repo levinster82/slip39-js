@@ -39,6 +39,15 @@ v0.1.9
 
 - feat: Exported word list.
 
+v0.4.0-levinster82.2
+
+Fixes
+
+- `listsAreEqual()` no longer calls `crypto.timingSafeEqual`, which has no
+  browser shim in `crypto-browserify`. Replaced with a self-contained
+  constant-time comparison so the digest check keeps its timing-safety
+  property without a Node-only dependency, unblocking browser bundling.
+
 v0.4.0-levinster82.1
 
 Features
