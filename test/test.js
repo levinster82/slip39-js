@@ -390,8 +390,16 @@ describe("Built-in prototype extensions", () => {
       Array().slip39Generate(3, (i) => i * 2),
       [0, 2, 4],
     );
-    assert.strictEqual([255, 1].toHexString(), "ff01");
-    assert.deepStrictEqual([].toByteArray("ff01"), [255, 1]);
+  });
+
+  it("should no longer patch the hex helpers onto Array.prototype", () => {
+    assert.strictEqual([].toHexString, undefined);
+    assert.strictEqual([].toByteArray, undefined);
+  });
+
+  it("should expose the hex helpers as plain functions", () => {
+    assert.strictEqual(helper.toHexString([255, 1]), "ff01");
+    assert.deepStrictEqual(helper.toByteArray("ff01"), [255, 1]);
   });
 
   it("should keep slip39Generate mutating and returning the receiver", () => {

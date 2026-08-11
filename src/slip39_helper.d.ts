@@ -56,3 +56,9 @@ export declare function decodeHex(bytes: number[]): string;
 
 /** Builds an array of `m` values produced by `v`. */
 export declare function generate<T>(m: number, v?: (i: number) => T): T[];
+
+/** Lowercase hex representation of a list of byte values. */
+export declare function toHexString(bytes: number[]): string;
+
+/** Parses a hex string into byte values. */
+export declare function toByteArray(hexString: string): number[];

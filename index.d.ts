@@ -97,9 +97,5 @@ declare global {
     slip39DecodeHex(): string;
     /** Fills the array with `m` values produced by `v`, and returns it. */
     slip39Generate(m: number, v?: (i: number) => unknown): T[];
-    /** Lowercase hex representation of the array's byte values. */
-    toHexString(): string;
-    /** Appends the bytes of a hex string to the array, and returns it. */
-    toByteArray(hexString: string): number[];
   }
 }

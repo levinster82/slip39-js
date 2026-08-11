@@ -144,10 +144,21 @@ const { WORD_LIST } = require("slip39/src/slip39_helper");
 - **Secrets are not zeroized.** Master secrets and intermediate shares live in
   ordinary JavaScript arrays, which cannot be reliably wiped from memory. This
   is a limitation of the runtime, not something the library can work around.
-- **`slip39EncodeHex` and friends patch the built-in prototypes.** They are
-  kept for backwards compatibility and are defined as non-enumerable, so they
-  do not appear in `for...in` loops. New code should prefer the exported
-  `encodeHex` / `decodeHex` functions from the helper module.
+- **`slip39EncodeHex`, `slip39DecodeHex` and `slip39Generate` patch the
+  built-in prototypes.** They are kept for backwards compatibility and are
+  defined as non-enumerable, so they do not appear in `for...in` loops. New
+  code should prefer the exported `encodeHex` / `decodeHex` / `generate`
+  functions from the helper module.
+- **`toHexString` and `toByteArray` are no longer on `Array.prototype`.** They
+  were never used by the library or documented, and both names collide easily.
+  They are exported from the helper module instead:
+
+  ```javascript
+  const { toHexString, toByteArray } = require("slip39/src/slip39_helper");
+
+  toHexString([255, 1]); // "ff01"
+  toByteArray("ff01"); // [255, 1]
+  ```
 
 ## Testing
 

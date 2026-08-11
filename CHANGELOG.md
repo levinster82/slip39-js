@@ -39,6 +39,25 @@ v0.1.9
 
 - feat: Exported word list.
 
+v0.3.0-levinster82.1
+
+Breaking
+
+- `Array.prototype.toHexString` and `Array.prototype.toByteArray` are no longer
+  patched onto the built-in prototype. Neither was used by the library nor
+  documented, and both names collide readily with other crypto packages. The
+  functionality is exported from `src/slip39_helper.js` instead:
+
+      const { toHexString, toByteArray } = require("slip39/src/slip39_helper");
+      toHexString([255, 1]); // "ff01"
+      toByteArray("ff01");   // [255, 1]
+
+  `toByteArray` now takes just the hex string and returns a new array, rather
+  than appending to the array it was called on.
+
+- `slip39EncodeHex`, `slip39DecodeHex` and `slip39Generate` are unaffected and
+  remain on the prototypes.
+
 v0.2.0-levinster82.1
 
 Fork release, not published to npm. The `slip39` package on npm is maintained

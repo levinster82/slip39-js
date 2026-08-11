@@ -131,11 +131,12 @@ function encodePassphrase(passphrase) {
   );
 }
 
-function toByteArray(target, hexString) {
+function toByteArray(hexString) {
+  const bytes = [];
   for (let i = 0; i < hexString.length; i = i + 2) {
-    target.push(parseInt(hexString.substr(i, 2), 16));
+    bytes.push(parseInt(hexString.substring(i, i + 2), 16));
   }
-  return target;
+  return bytes;
 }
 
 //
@@ -175,13 +176,10 @@ definePrototypeMethod(
   },
 );
 
-definePrototypeMethod(Array.prototype, "toHexString", function () {
-  return toHexString(this);
-});
-
-definePrototypeMethod(Array.prototype, "toByteArray", function (hexString) {
-  return toByteArray(this, hexString);
-});
+// Note: `toHexString` and `toByteArray` used to be patched onto
+// Array.prototype as well. Nothing in this library ever called them, they were
+// never documented, and both names are ones other crypto libraries reach for.
+// They are exported as plain functions instead.
 
 const BIGINT_WORD_BITS = BigInt(8);
 
@@ -1950,4 +1948,8 @@ exports = module.exports = {
   encodeHex,
   decodeHex,
   generate,
+  // Hex conversion helpers. Unused by the library itself, and no longer
+  // patched onto Array.prototype.
+  toHexString,
+  toByteArray,
 };
