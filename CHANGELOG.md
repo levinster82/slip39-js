@@ -38,3 +38,41 @@ v0.1.8
 v0.1.9
 
 - feat: Exported word list.
+
+v0.1.10 (unreleased)
+
+Fixes
+
+- **`iterationExponent: 16` produced unrecoverable shares.** Only 4 bits are
+  available for the exponent, so 16 overflowed into the extendable backup flag
+  and every generated share failed its checksum on recovery. Values above 15
+  are now rejected. Shares created with `16` were never recoverable.
+- Passphrases are now encoded as NFKD-normalized UTF-8 as the specification
+  requires, instead of raw UTF-16 code units truncated to bytes. ASCII
+  passphrases are byte-for-byte unchanged; non-ASCII ones now interoperate with
+  other SLIP-39 implementations and are no longer rejected by `fromArray`.
+- `interpolate()` no longer falls through to a `log(0)` lookup when asked for an
+  x-coordinate it already holds.
+- `bitsToBytes()` / `bitsToWords()` no longer pass `RADIX_BITS` as `parseInt`'s
+  radix argument, which happened to work only because it equals 10.
+- `splitSecret()` with a threshold of 1 returns independent copies rather than
+  many references to one array.
+- The shared-secret digest is now compared with `crypto.timingSafeEqual`.
+
+Compatibility
+
+- The `String.prototype` / `Array.prototype` extensions are unchanged and still
+  work, but are now defined as **non-enumerable**, so they no longer leak into
+  `for...in` loops over arrays and strings in the host application. Equivalent
+  `encodeHex` / `decodeHex` / `generate` functions are exported from
+  `src/slip39_helper.js` for code that would rather not rely on them.
+
+Tooling
+
+- Added TypeScript declarations (`index.d.ts`).
+- Added a `files` allowlist; the published tarball no longer carries tests,
+  examples, or CI config.
+- Replaced the never-runnable `.eslintrc.js` with a flat `eslint.config.js`,
+  added eslint as a devDependency and `npm run lint`.
+- `package-lock.json` is now tracked and CI installs with `npm ci`.
+- CI actions updated to v4; Node matrix is now 20/22/24.

@@ -96,99 +96,73 @@ console.log("Recovered one: " + recoveredSecret.slip39DecodeHex());
 assert(masterSecret.slip39DecodeHex() === recoveredSecret.slip39DecodeHex());
 ```
 
+## API
+
+### `Slip39.fromArray(masterSecret, options?)`
+
+Splits `masterSecret` (an array of byte values, at least 16 bytes and of even
+length) into a share tree. Options:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `passphrase` | `""` | Encrypts the master secret. NFKD UTF-8 encoded. |
+| `threshold` | `1` | Number of group shares needed to reconstruct the secret. |
+| `groups` | `[[1, 1, "..."]]` | Group specs, `[threshold, members, description?]`. |
+| `iterationExponent` | `0` | PBKDF2 work factor, `0` to `15` inclusive. |
+| `extendableBackupFlag` | `1` | Set the [extendable backup flag](https://github.com/satoshilabs/slips/blob/master/slip-0039.md). |
+| `title` | `"My default slip39 shares"` | Description of the whole set. |
+
+### `Slip39.recoverSecret(mnemonics, passphrase?)`
+
+Recombines an array of mnemonic strings into the master secret, as an array of
+byte values. Throws if the set is insufficient, inconsistent, or corrupt.
+
+### `Slip39.validateMnemonic(mnemonic)`
+
+Returns whether a single mnemonic string is well formed, without attempting
+recovery.
+
+### `slip.fromPath(path)`
+
+Returns the node at `path` (`"r"`, `"r/0"`, `"r/3/1"`). Each node exposes
+`description`, `children`, and `mnemonics`.
+
+### Word list
+
+The SLIP-39 word list is exported from the helper module:
+
+```javascript
+const { WORD_LIST } = require("slip39/src/slip39_helper");
+```
+
+## Notes and caveats
+
+- **Passphrases** are encoded as NFKD-normalized UTF-8, per the specification.
+  SLIP-39 recommends restricting them to printable ASCII (code points 32-126)
+  for the widest interoperability with other implementations; anything outside
+  that range is accepted here but may not be portable.
+- **Secrets are not zeroized.** Master secrets and intermediate shares live in
+  ordinary JavaScript arrays, which cannot be reliably wiped from memory. This
+  is a limitation of the runtime, not something the library can work around.
+- **`slip39EncodeHex` and friends patch the built-in prototypes.** They are
+  kept for backwards compatibility and are defined as non-enumerable, so they
+  do not appear in `for...in` loops. New code should prefer the exported
+  `encodeHex` / `decodeHex` functions from the helper module.
+
 ## Testing
 
 ```bash
  $ npm install
  $ npm test
+```
 
-  Basic Tests
-    Test threshold 1 with 5 of 7 shares of a group combinations
-      ✓ Test combination 0 1 2 3 4.
-      ✓ Test combination 0 1 2 3 5.
-      ✓ Test combination 0 1 2 3 6.
-      ✓ Test combination 0 1 2 4 5.
-      ✓ Test combination 0 1 2 4 6.
-      ✓ Test combination 0 1 2 5 6.
-      ✓ Test combination 0 1 3 4 5.
-      ✓ Test combination 0 1 3 4 6.
-      ✓ Test combination 0 1 3 5 6.
-      ✓ Test combination 0 1 4 5 6.
-      ✓ Test combination 0 2 3 4 5.
-      ✓ Test combination 0 2 3 4 6.
-      ✓ Test combination 0 2 3 5 6.
-      ✓ Test combination 0 2 4 5 6.
-      ✓ Test combination 0 3 4 5 6.
-      ✓ Test combination 1 2 3 4 5.
-      ✓ Test combination 1 2 3 4 6.
-      ✓ Test combination 1 2 3 5 6.
-      ✓ Test combination 1 2 4 5 6.
-      ✓ Test combination 1 3 4 5 6.
-      ✓ Test combination 2 3 4 5 6.
-    Test passhrase
-      ✓ should return valid mastersecret when user submits valid passphrse
-      ✓ should NOT return valid mastersecret when user submits invalid passphrse
-      ✓ should return valid mastersecret when user does not submit passphrse
-    Test iteration exponent
-      ✓ should return valid mastersecret when user apply valid iteration exponent (44ms)
-      ✓ should throw an Error when user submits invalid iteration exponent
+The suite covers the official SLIP-39 test vectors along with group, path, and
+validation cases.
 
-  Group Shares Tests
-    Test all valid combinations of mnemonics
-      ✓ should return the valid mastersecret when valid mnemonics used for recovery
-    Original test vectors Tests
-      ✓ 1. Valid mnemonic without sharing (128 bits)
-      ✓ 2. Mnemonic with invalid checksum (128 bits)
-      ✓ 3. Mnemonic with invalid padding (128 bits)
-      ✓ 4. Basic sharing 2-of-3 (128 bits)
-      ✓ 5. Basic sharing 2-of-3 (128 bits)
-      ✓ 6. Mnemonics with different identifiers (128 bits)
-      ✓ 7. Mnemonics with different iteration exponents (128 bits)
-      ✓ 8. Mnemonics with mismatching group thresholds (128 bits)
-      ✓ 9. Mnemonics with mismatching group counts (128 bits)
-      ✓ 10. Mnemonics with greater group threshold than group counts (128 bits)
-      ✓ 11. Mnemonics with duplicate member indices (128 bits)
-      ✓ 12. Mnemonics with mismatching member thresholds (128 bits)
-      ✓ 13. Mnemonics giving an invalid digest (128 bits)
-      ✓ 14. Insufficient number of groups (128 bits, case 1)
-      ✓ 15. Insufficient number of groups (128 bits, case 2)
-      ✓ 16. Threshold number of groups, but insufficient number of members in one group (128 bits)
-      ✓ 17. Threshold number of groups and members in each group (128 bits, case 1)
-      ✓ 18. Threshold number of groups and members in each group (128 bits, case 2)
-      ✓ 19. Threshold number of groups and members in each group (128 bits, case 3)
-      ✓ 20. Valid mnemonic without sharing (256 bits)
-      ✓ 21. Mnemonic with invalid checksum (256 bits)
-      ✓ 22. Mnemonic with invalid padding (256 bits)
-      ✓ 23. Basic sharing 2-of-3 (256 bits)
-      ✓ 24. Basic sharing 2-of-3 (256 bits)
-      ✓ 25. Mnemonics with different identifiers (256 bits)
-      ✓ 26. Mnemonics with different iteration exponents (256 bits)
-      ✓ 27. Mnemonics with mismatching group thresholds (256 bits)
-      ✓ 28. Mnemonics with mismatching group counts (256 bits)
-      ✓ 29. Mnemonics with greater group threshold than group counts (256 bits)
-      ✓ 30. Mnemonics with duplicate member indices (256 bits)
-      ✓ 31. Mnemonics with mismatching member thresholds (256 bits)
-      ✓ 32. Mnemonics giving an invalid digest (256 bits)
-      ✓ 33. Insufficient number of groups (256 bits, case 1)
-      ✓ 34. Insufficient number of groups (256 bits, case 2)
-      ✓ 35. Threshold number of groups, but insufficient number of members in one group (256 bits)
-      ✓ 36. Threshold number of groups and members in each group (256 bits, case 1)
-      ✓ 37. Threshold number of groups and members in each group (256 bits, case 2)
-      ✓ 38. Threshold number of groups and members in each group (256 bits, case 3)
-      ✓ 39. Mnemonic with insufficient length
-      ✓ 40. Mnemonic with invalid master secret length
-    Invalid Shares
-      ✓ Short master secret
-      ✓ Odd length master secret
-      ✓ Group threshold exceeds number of groups
-      ✓ Invalid group threshold.
-      ✓ Member threshold exceeds number of members
-      ✓ Invalid member threshold
-      ✓ Group with multiple members and threshold 1
+## Linting
 
-
-  74 passing (477ms)
-
+```bash
+ $ npm run lint
 ```
 
 ## TODOS
