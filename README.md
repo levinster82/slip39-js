@@ -43,7 +43,8 @@ npm install slip39
 
 ## Using
 
-See `example/main.js`
+See `example/main.js` for the array form, and `example/json.js` for the JSON
+form
 
 ```javascript
 const slip39 = require("../src/slip39.js");
@@ -235,6 +236,9 @@ const slip = slip39.fromJson(masterSecret, config, { passphrase: "TREZOR" });
 
 slip.fromPath("r/2/0").description; // "Albert"
 ```
+
+See `example/json.js` for a fuller version, including looking a share up by
+name and serialising the tree back out.
 
 `fromJson(masterSecret, json, options?)` accepts the description as an object
 or a JSON string. `options` takes the same `passphrase`, `iterationExponent`
